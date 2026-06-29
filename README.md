@@ -25,24 +25,31 @@ The scheduler integrates workload traces with time-varying carbon intensity data
 ## Repository Structure
 
 
-scheduler/
-│── EnergyAware.java
-│── BaselineQLearning.java
-│── CarbonIntensityLoader.java
-│── GoogleTraceLoader.java
-|── MetricsCollection.java
-|── QLearningScheduler.java
-|── RoundRobin.java
-
-datasets/
-│── Google Cluster Trace (processed)
-    |── prepared_tasks.xlsx
-│── Carbon intensity profiles
-    |── April9.xlsx
-    |── January4.xlsx
-    |── January12.xlsx
-    |── January15.xlsx
-    |── October24.xlsx
+```text
+Carbon-Aware-Scheduler/
+│
+├── scheduler/
+│   ├── EnergyAware.java
+│   ├── BaselineQLearning.java
+│   ├── CarbonIntensityLoader.java
+│   ├── GoogleTraceLoader.java
+│   ├── MetricsCollection.java
+│   ├── QLearningScheduler.java
+│   └── RoundRobin.java
+│
+├── datasets/
+│   ├── Google Cluster Trace (processed)
+│   ├── prepared_tasks.xlsx
+│   └── Carbon intensity profiles/
+│       ├── April9.xlsx
+│       ├── January4.xlsx
+│       ├── January12.xlsx
+│       ├── January15.xlsx
+│       └── October24.xlsx
+│
+├── README.md
+└── .gitignore
+```
 
 ---
 
