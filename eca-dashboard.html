@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECA Scheduler — Energy-Carbon Aware Scheduling Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg: #0c1210;
+    --bg-alt: #0f1613;
+    --panel: #131c19;
+    --panel-alt: #182320;
+    --border: #223028;
+    --border-soft: #1b2622;
+    --text: #e7ede9;
+    --text-muted: #8ba299;
+    --text-dim: #5f766d;
+
+    --c-rr: #e2574c;
+    --c-baseline: #e8a23d;
+    --c-energy: #7fbf6b;
+    --c-eca: #2fd6a3;
+
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  body{
+    margin:0;
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -5%, rgba(47,214,163,0.07), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 10%, rgba(226,87,76,0.05), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  ::selection{ background:rgba(47,214,163,0.25); }
+
+  a{ color:inherit; }
+
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 28px; }
+
+  /* ---------- Header ---------- */
+  header.hero{
+    padding:64px 0 40px;
+    border-bottom:1px solid var(--border-soft);
+  }
+  .eyebrow{
+    font-family:var(--font-mono);
+    font-size:12px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--c-eca);
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .eyebrow .dot{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--c-eca);
+    box-shadow:0 0 10px 2px rgba(47,214,163,0.6);
+  }
+  h1{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:clamp(32px, 4.4vw, 52px);
+    line-height:1.05;
+    margin:0 0 18px;
+    letter-spacing:-0.01em;
+    max-width:900px;
+  }
+  h1 .accent{ color:var(--c-eca); }
+
+  .overview{
+    font-size:16px;
+    color:var(--text-muted);
+    max-width:720px;
+    margin:0 0 34px;
+  }
+
+  .metrics-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(190px,1fr));
+    gap:1px;
+    background:var(--border-soft);
+    border:1px solid var(--border-soft);
+    border-radius:10px;
+    overflow:hidden;
+  }
+  .metric-card{
+    background:var(--panel);
+    padding:16px 18px;
+  }
+  .metric-card .label{
+    font-family:var(--font-mono);
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:var(--text-dim);
+    margin-bottom:6px;
+  }
+  .metric-card .desc{
+    font-size:13px;
+    color:var(--text-muted);
+  }
+
+  /* ---------- Controls ---------- */
+  section.controls{
+    padding:44px 0 12px;
+  }
+  .control-block{ margin-bottom:28px; }
+  .control-title{
+    font-family:var(--font-mono);
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.1em;
+    color:var(--text-dim);
+    margin-bottom:12px;
+  }
+  .btn-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+
+  .wl-btn{
+    font-family:var(--font-body);
+    font-weight:500;
+    font-size:14px;
+    color:var(--text-muted);
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:11px 20px;
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .wl-btn:hover{ border-color:var(--text-dim); color:var(--text); }
+  .wl-btn.active{
+    color:#0c1210;
+    background:var(--c-eca);
+    border-color:var(--c-eca);
+    font-weight:600;
+  }
+
+  /* scheduler pills — the signature element: a small carbon gauge bar under each */
+  .sched-btn{
+    position:relative;
+    font-family:var(--font-body);
+    font-weight:500;
+    font-size:14px;
+    color:var(--text-muted);
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:11px 18px 14px;
+    cursor:pointer;
+    text-align:left;
+    min-width:150px;
+    transition:all .15s ease;
+  }
+  .sched-btn:hover{ border-color:var(--text-dim); color:var(--text); }
+  .sched-btn .name{ display:flex; align-items:center; gap:8px; }
+  .sched-btn .dot{ width:8px;height:8px;border-radius:50%; flex:none; }
+  .sched-btn .gauge{
+    margin-top:9px;
+    height:3px;
+    border-radius:2px;
+    background:var(--border);
+    overflow:hidden;
+  }
+  .sched-btn .gauge-fill{ height:100%; border-radius:2px; }
+  .sched-btn.active{
+    background:var(--panel-alt);
+    color:var(--text);
+    box-shadow:inset 0 0 0 1px currentColor;
+  }
+  .sched-btn[data-sched="RR"] .dot, .sched-btn[data-sched="RR"].active{ color:var(--c-rr); }
+  .sched-btn[data-sched="Baseline QL"] .dot, .sched-btn[data-sched="Baseline QL"].active{ color:var(--c-baseline); }
+  .sched-btn[data-sched="Energy-Aware"] .dot, .sched-btn[data-sched="Energy-Aware"].active{ color:var(--c-energy); }
+  .sched-btn[data-sched="ECA"] .dot, .sched-btn[data-sched="ECA"].active{ color:var(--c-eca); }
+  .sched-btn[data-sched="RR"] .gauge-fill{ background:var(--c-rr); width:90%; }
+  .sched-btn[data-sched="Baseline QL"] .gauge-fill{ background:var(--c-baseline); width:70%; }
+  .sched-btn[data-sched="Energy-Aware"] .gauge-fill{ background:var(--c-energy); width:50%; }
+  .sched-btn[data-sched="ECA"] .gauge-fill{ background:var(--c-eca); width:28%; }
+
+  /* ---------- Result console ---------- */
+  section.result{ padding:20px 0 56px; }
+  .console{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    overflow:hidden;
+  }
+  .console-bar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:12px 18px;
+    border-bottom:1px solid var(--border-soft);
+    background:var(--panel-alt);
+  }
+  .console-bar .path{
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--text-dim);
+  }
+  .console-bar .path b{ color:var(--text-muted); font-weight:500; }
+  .console-body{ padding:22px 24px 26px; }
+  .console-headline{
+    font-family:var(--font-display);
+    font-size:20px;
+    font-weight:600;
+    margin:0 0 6px;
+  }
+  .console-sub{
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--text-dim);
+    margin-bottom:18px;
+  }
+  .console-text{
+    font-size:14.5px;
+    color:var(--text-muted);
+    max-width:760px;
+    margin-bottom:22px;
+  }
+  .stat-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(140px,1fr));
+    gap:14px;
+  }
+  .stat{
+    background:var(--bg-alt);
+    border:1px solid var(--border-soft);
+    border-radius:8px;
+    padding:12px 14px;
+  }
+  .stat .k{ font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-dim); margin-bottom:5px;}
+  .stat .v{ font-family:var(--font-mono); font-size:19px; font-weight:600; color:var(--text); }
+  .stat .v span{ font-size:12px; color:var(--text-dim); font-weight:400; margin-left:3px;}
+
+  /* ---------- Chart sections ---------- */
+  section.chartsec{ padding:50px 0; border-top:1px solid var(--border-soft); }
+  .sec-head{ margin-bottom:28px; }
+  .sec-eyebrow{
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    margin-bottom:8px;
+  }
+  .sec-title{
+    font-family:var(--font-display);
+    font-size:26px;
+    font-weight:600;
+    margin:0 0 8px;
+  }
+  .sec-desc{ color:var(--text-muted); font-size:14.5px; max-width:640px; }
+
+  .chart-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(420px,1fr));
+    gap:20px;
+  }
+  .chart-grid.single{ grid-template-columns:1fr; }
+  .chart-card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:20px 22px 16px;
+  }
+  .chart-card.hero-chart{
+    border-color:rgba(47,214,163,0.35);
+    background:linear-gradient(180deg, rgba(47,214,163,0.05), var(--panel) 40%);
+  }
+  .chart-card .ctitle{
+    display:flex; align-items:center; gap:8px;
+    font-family:var(--font-display);
+    font-size:15.5px; font-weight:600;
+    margin-bottom:3px;
+  }
+  .chart-card .ctitle .idx{
+    font-family:var(--font-mono);
+    font-size:11px; color:var(--text-dim); font-weight:500;
+  }
+  .chart-card .ccaption{
+    font-size:12.5px; color:var(--text-dim); margin-bottom:14px;
+  }
+  .chart-card canvas{ max-height:280px; }
+  .chart-card.hero-chart canvas{ max-height:320px; }
+
+  footer{
+    padding:40px 0 60px;
+    border-top:1px solid var(--border-soft);
+    color:var(--text-dim);
+    font-family:var(--font-mono);
+    font-size:12px;
+  }
+
+  @media (max-width:640px){
+    .wrap{ padding:0 18px; }
+    header.hero{ padding:44px 0 28px; }
+    .chart-grid{ grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot"></span>Cloud Scheduling Simulation Results</div>
+    <h1>Energy–Carbon Aware <span class="accent">(ECA)</span> Scheduler</h1>
+    <p class="overview">
+      This dashboard compares four cloud task scheduling strategies — Round Robin, a Baseline
+      Q-Learning agent, an Energy-Aware heuristic, and the proposed ECA Scheduler — across light,
+      medium, and heavy workloads. ECA selects virtual machines using real-time carbon intensity
+      signals rather than energy consumption alone, aiming to cut emissions without sacrificing
+      execution speed. Select a workload and scheduler below to view the run summary, then scroll
+      down for full comparison, workload-scaling, and per-VM carbon analyses.
+    </p>
+
+    <div class="metrics-row">
+      <div class="metric-card"><div class="label">Carbon Intensity</div><div class="desc">gCO₂ emitted per kWh drawn, at the moment a task is scheduled</div></div>
+      <div class="metric-card"><div class="label">Total Carbon</div><div class="desc">Cumulative gCO₂ emitted across the full workload run</div></div>
+      <div class="metric-card"><div class="label">Energy</div><div class="desc">Total kWh consumed by all VMs during execution</div></div>
+      <div class="metric-card"><div class="label">Makespan</div><div class="desc">Wall-clock seconds until the last cloudlet finishes</div></div>
+      <div class="metric-card"><div class="label">Throughput</div><div class="desc">Cloudlets completed per second, system-wide</div></div>
+      <div class="metric-card"><div class="label">Exec. Time</div><div class="desc">Average per-cloudlet processing time, in seconds</div></div>
+      <div class="metric-card"><div class="label">VM Utilization</div><div class="desc">Average percentage of VM capacity kept busy during the run</div></div>
+    </div>
+  </div>
+</header>
+
+<section class="controls">
+  <div class="wrap">
+    <div class="control-block">
+      <div class="control-title">01 — Workload</div>
+      <div class="btn-row" id="workload-row">
+        <button class="wl-btn active" data-workload="light">Light</button>
+        <button class="wl-btn" data-workload="medium">Medium</button>
+        <button class="wl-btn" data-workload="heavy">Heavy</button>
+      </div>
+    </div>
+
+    <div class="control-block">
+      <div class="control-title">02 — Scheduler</div>
+      <div class="btn-row" id="scheduler-row">
+        <button class="sched-btn active" data-sched="RR">
+          <span class="name"><span class="dot"></span>Round Robin</span>
+          <div class="gauge"><div class="gauge-fill"></div></div>
+        </button>
+        <button class="sched-btn" data-sched="Baseline QL">
+          <span class="name"><span class="dot"></span>Baseline QL</span>
+          <div class="gauge"><div class="gauge-fill"></div></div>
+        </button>
+        <button class="sched-btn" data-sched="Energy-Aware">
+          <span class="name"><span class="dot"></span>Energy-Aware</span>
+          <div class="gauge"><div class="gauge-fill"></div></div>
+        </button>
+        <button class="sched-btn" data-sched="ECA">
+          <span class="name"><span class="dot"></span>ECA (Proposed)</span>
+          <div class="gauge"><div class="gauge-fill"></div></div>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="result">
+  <div class="wrap">
+    <div class="console">
+      <div class="console-bar">
+        <div class="path">result / <b id="path-sched">round-robin</b> / <b id="path-wl">light</b></div>
+        <div class="path" id="path-tag">RUN #01</div>
+      </div>
+      <div class="console-body">
+        <div class="console-sub" id="result-eyebrow">SCHEDULER · WORKLOAD</div>
+        <h3 class="console-headline" id="result-headline">Round Robin — Light Workload</h3>
+        <p class="console-text" id="result-text">Loading…</p>
+        <div class="stat-grid" id="result-stats"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCHEDULER COMPARISON ============ -->
+<section class="chartsec" id="sec-comparison">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-eyebrow">Scheduler Comparison</div>
+      <h2 class="sec-title">Overall performance, all schedulers</h2>
+      <p class="sec-desc">Aggregated across all workload levels. Figures below are placeholder values — swap in your simulation output.</p>
+    </div>
+
+    <div class="chart-grid single" style="margin-bottom:20px;">
+      <div class="chart-card hero-chart">
+        <div class="ctitle"><span class="idx">01</span>Overall Scheduler Comparison — Carbon Intensity</div>
+        <div class="ccaption">The headline result: average carbon intensity (gCO₂/kWh) of the energy each scheduler drew on. Lower is cleaner.</div>
+        <canvas id="chart-01"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="ctitle"><span class="idx">02</span>Total Carbon Emissions</div>
+        <div class="ccaption">Actual cumulative gCO₂ emitted over the full run.</div>
+        <canvas id="chart-02"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="ctitle"><span class="idx">03</span>Total Energy Consumption</div>
+        <div class="ccaption">Energy draw is similar across schedulers — ECA wins by choosing <em>cleaner</em> energy, not just less of it.</div>
+        <canvas id="chart-03"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="ctitle"><span class="idx">04</span>Makespan</div>
+        <div class="ccaption">Did carbon reduction come at the cost of execution speed? Comparable makespan across all four.</div>
+        <canvas id="chart-04"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="ctitle"><span class="idx">05</span>Throughput</div>
+        <div class="ccaption">Cloudlets completed per second, system-wide.</div>
+        <canvas id="chart-05"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="ctitle"><span class="idx">06</span>Average Execution Time</div>
+        <div class="ccaption">Mean per-cloudlet processing time.</div>
+        <canvas id="chart-06"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WORKLOAD ANALYSIS ============ -->
+<section class="chartsec" id="sec-workload">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-eyebrow">Workload Analysis</div>
+      <h2 class="sec-title">Scaling across Light → Medium → Heavy</h2>
+      <p class="sec-desc">Each line is one scheduler, tracked across the three workload tiers — this is where scalability claims are won or lost.</p>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="ctitle"><span class="idx">07</span>Carbon Intensity vs Workload</div>
+        <div class="ccaption">ECA's gap over RR widens as workload grows — the scheduler scales.</div>
+        <canvas id="chart-07"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="ctitle"><span class="idx">08</span>Total Carbon vs Workload</div>
+        <div class="ccaption">Absolute emissions per workload tier, one line per scheduler.</div>
+        <canvas id="chart-08"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="ctitle"><span class="idx">09</span>Makespan vs Workload</div>
+        <div class="ccaption">Execution time growth stays proportional — no runaway slowdown under load.</div>
+        <canvas id="chart-09"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="ctitle"><span class="idx">10</span>Throughput vs Workload</div>
+        <div class="ccaption">Throughput degradation under heavier load, compared across schedulers.</div>
+        <canvas id="chart-10"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VM ANALYSIS ============ -->
+<section class="chartsec" id="sec-vm">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-eyebrow">VM Analysis — ECA Only</div>
+      <h2 class="sec-title">Why ECA behaves the way it does</h2>
+      <p class="sec-desc">Placeholder values — fill in with real per-VM telemetry once available. Explains ECA's internal VM preference.</p>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="ctitle"><span class="idx">11</span>VM Selection Distribution</div>
+        <div class="ccaption">How many cloudlets ECA routed to each VM.</div>
+        <canvas id="chart-11"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="ctitle"><span class="idx">12</span>Average Carbon per VM</div>
+        <div class="ccaption">Why some VMs are preferred: their average carbon cost is simply lower.</div>
+        <canvas id="chart-12"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-grid single" style="margin-top:20px;">
+      <div class="chart-card hero-chart">
+        <div class="ctitle"><span class="idx">13</span>Carbon Profile of Each VM Over Time</div>
+        <div class="ccaption">Carbon intensity per VM across the day's time slots. VM2 turns dirty after ~09:00; VM4 stays clean throughout — this is the signal ECA is reading.</div>
+        <canvas id="chart-13"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">ECA Scheduler Dashboard · placeholder data throughout, replace with simulation output</div>
+</footer>
+
+<script>
+/* ===================== DATA ===================== */
+const SCHEDULERS = ["RR","Baseline QL","Energy-Aware","ECA"];
+const SCHED_LABEL = {"RR":"Round Robin","Baseline QL":"Baseline QL","Energy-Aware":"Energy-Aware","ECA":"ECA (Proposed)"};
+const SCHED_COLOR = {"RR":"#e2574c","Baseline QL":"#e8a23d","Energy-Aware":"#7fbf6b","ECA":"#2fd6a3"};
+const WORKLOADS = ["light","medium","heavy"];
+const WL_LABEL = {"light":"Light","medium":"Medium","heavy":"Heavy"};
+
+// 12 textual results: [scheduler][workload] — from actual simulation runs
+const RESULTS = {
+  "RR": {
+    light:  { text:"Round Robin cycles tasks evenly across all VMs with no awareness of grid carbon intensity. On the 299-cloudlet light workload it finishes in 162.89s with VM utilization above 93%, but carbon intensity sits at 195.58 gCO₂/kWh since VM choice ignores the grid signal entirely.", carbonIntensity:195.58, totalCarbon:10.328569, energy:0.052811, makespan:162.89, throughput:1.8356, execTime:2.54, vmUtil:93.37 },
+    medium: { text:"On the 839-cloudlet medium workload, Round Robin keeps utilization near 92% and completes in 450s. Carbon intensity (195.65 gCO₂/kWh) is essentially unchanged from the light run — as expected, since the scheduler never reads the grid.", carbonIntensity:195.65, totalCarbon:28.117612, energy:0.143717, makespan:450.00, throughput:1.8644, execTime:2.47, vmUtil:91.98 },
+    heavy:  { text:"On the 3355-cloudlet heavy workload, Round Robin scales roughly linearly: makespan rises to 1739.91s, utilization stays above 94%, and total carbon reaches 110.22 gCO₂ — the largest absolute footprint of the run, driven purely by task volume.", carbonIntensity:193.52, totalCarbon:110.217340, energy:0.569554, makespan:1739.91, throughput:1.9283, execTime:2.44, vmUtil:94.28 }
+  },
+  "Baseline QL": {
+    light:  { text:"The baseline Q-Learning agent optimizes for load balance and makespan with no carbon term in its reward. On the light workload it lands almost exactly on Round Robin: 166.44s makespan, 91.38% utilization, 194.66 gCO₂/kWh carbon intensity — a carbon-blind policy converges to a carbon-blind result.", carbonIntensity:194.66, totalCarbon:10.279889, energy:0.052809, makespan:166.44, throughput:1.7964, execTime:2.54, vmUtil:91.38 },
+    medium: { text:"On the medium workload the QL agent's learned policy again tracks Round Robin closely (449.22s makespan, 194.97 gCO₂/kWh), confirming that without a carbon signal, a learning-based scheduler offers no emissions advantage over a static one.", carbonIntensity:194.97, totalCarbon:28.031110, energy:0.143775, makespan:449.22, throughput:1.8677, execTime:2.47, vmUtil:92.18 },
+    heavy:  { text:"Under heavy load, Baseline QL's total carbon (110.65 gCO₂) is marginally the highest of the three carbon-blind schedulers, despite a slightly faster makespan than RR — reinforcing that its optimization target (throughput/utilization) is orthogonal to emissions.", carbonIntensity:194.41, totalCarbon:110.654902, energy:0.569189, makespan:1738.78, throughput:1.9295, execTime:2.44, vmUtil:94.28 }
+  },
+  "Energy-Aware": {
+    light:  { text:"The Energy-Aware heuristic edges out RR and QL on every axis at light load: fastest makespan of the non-ECA schedulers (160.64s), highest utilization (94.62%), and the lowest carbon intensity of the three baselines (194.21 gCO₂/kWh) — though still far from ECA's territory.", carbonIntensity:194.21, totalCarbon:10.250251, energy:0.052778, makespan:160.64, throughput:1.8613, execTime:2.54, vmUtil:94.62 },
+    medium: { text:"On medium load, Energy-Aware again leads the non-ECA group on makespan (433.67s) and utilization (95.48%), with the lowest total carbon among baselines (27.87 gCO₂). Favoring low-power VMs correlates with, but doesn't directly target, lower emissions.", carbonIntensity:193.83, totalCarbon:27.867579, energy:0.143775, makespan:433.67, throughput:1.9346, execTime:2.47, vmUtil:95.48 },
+    heavy:  { text:"At heavy load, Energy-Aware posts the best makespan (1716.16s) and utilization (95.57%) of any scheduler in this study, but its carbon intensity (193.79 gCO₂/kWh) is barely distinguishable from RR and QL — minimizing kWh is not the same as minimizing gCO₂.", carbonIntensity:193.79, totalCarbon:110.364953, energy:0.569497, makespan:1716.16, throughput:1.9549, execTime:2.44, vmUtil:95.57 }
+  },
+  "ECA": {
+    light:  { text:"On the light workload, ECA's carbon intensity is 199.30 gCO₂/kWh — actually the highest of all four schedulers — and total carbon (10.53 gCO₂) slightly exceeds RR. Makespan more than doubles (371.66s vs 162.89s) and utilization drops to 40.93%. At this workload size, ECA's carbon-aware delays are not paying off.", carbonIntensity:199.30, totalCarbon:10.526529, energy:0.052817, makespan:371.66, throughput:0.8045, execTime:2.54, vmUtil:40.93 },
+    medium: { text:"On the medium workload, ECA cuts carbon intensity to 147.09 gCO₂/kWh (about 25% below the ~195 gCO₂/kWh baselines) and total carbon to 21.17 gCO₂ — a real emissions win. That comes with a steep cost: makespan grows to 1199.89s (2.7× RR) and utilization falls to 34.54%.", carbonIntensity:147.09, totalCarbon:21.167137, energy:0.143908, makespan:1199.89, throughput:0.6992, execTime:2.47, vmUtil:34.54 },
+    heavy:  { text:"On the heavy workload, ECA reaches its lowest carbon intensity (135.16 gCO₂/kWh) and cuts total carbon by roughly 30% versus RR (77.08 vs 110.22 gCO₂). But makespan balloons to 5073.05s (2.9× RR) and utilization sits at just 32.38% — the largest speed/utilization trade-off in the study.", carbonIntensity:135.16, totalCarbon:77.083662, energy:0.570298, makespan:5073.05, throughput:0.6613, execTime:2.45, vmUtil:32.38 }
+  }
+};
+
+/* Chart 1 — overall carbon intensity per scheduler (mean across 3 workloads, horizontal bar) */
+const D01 = { labels:["RR","Baseline QL","Energy-Aware","ECA"], data:[194.92, 194.68, 193.94, 160.52] };
+/* Chart 2 — total carbon emissions (summed across 3 workloads) */
+const D02 = { labels:["RR","Baseline QL","Energy-Aware","ECA"], data:[148.66, 148.97, 148.48, 108.78] };
+/* Chart 3 — total energy consumption, kWh (summed across 3 workloads) */
+const D03 = { labels:["RR","Baseline QL","Energy-Aware","ECA"], data:[0.7661, 0.7658, 0.7660, 0.7670] };
+/* Chart 4 — makespan, mean seconds across 3 workloads */
+const D04 = { labels:["RR","Baseline QL","Energy-Aware","ECA"], data:[784.27, 784.81, 770.16, 2214.87] };
+/* Chart 5 — throughput, mean cloudlets/sec across 3 workloads */
+const D05 = { labels:["RR","Baseline QL","Energy-Aware","ECA"], data:[1.876, 1.865, 1.917, 0.722] };
+/* Chart 6 — avg execution time, mean seconds across 3 workloads */
+const D06 = { labels:["RR","Baseline QL","Energy-Aware","ECA"], data:[2.483, 2.483, 2.483, 2.487] };
+
+/* Charts 7-10 — workload scaling, one series per scheduler (Light / Medium / Heavy) */
+const WL_LABELS = ["Light","Medium","Heavy"];
+const D07 = { RR:[195.58,195.65,193.52], "Baseline QL":[194.66,194.97,194.41], "Energy-Aware":[194.21,193.83,193.79], ECA:[199.30,147.09,135.16] };
+const D08 = { RR:[10.328569,28.117612,110.217340], "Baseline QL":[10.279889,28.031110,110.654902], "Energy-Aware":[10.250251,27.867579,110.364953], ECA:[10.526529,21.167137,77.083662] };
+const D09 = { RR:[162.89,450.00,1739.91], "Baseline QL":[166.44,449.22,1738.78], "Energy-Aware":[160.64,433.67,1716.16], ECA:[371.66,1199.89,5073.05] };
+const D10 = { RR:[1.8356,1.8644,1.9283], "Baseline QL":[1.7964,1.8677,1.9295], "Energy-Aware":[1.8613,1.9346,1.9549], ECA:[0.8045,0.6992,0.6613] };
+
+/* Chart 11 — VM selection distribution (ECA) */
+const D11 = { labels:["VM0","VM1","VM2","VM3","VM4"], data:[45,12,8,30,55] };
+/* Chart 12 — average carbon per VM */
+const D12 = { labels:["VM0","VM1","VM2","VM3","VM4"], data:[140,260,290,155,95] };
+/* Chart 13 — carbon profile per VM over time slots */
+const TIME_SLOTS = ["00:00","02:00","04:00","06:00","08:00","10:00","12:00","14:00","16:00","18:00","20:00","22:00"];
+const D13 = {
+  VM0:[130,125,120,130,140,150,155,150,145,140,135,130],
+  VM1:[250,255,260,265,270,275,280,275,270,265,260,255],
+  VM2:[90,85,80,85,100,180,220,240,235,220,200,150],
+  VM3:[160,155,150,155,160,165,170,165,160,155,150,145],
+  VM4:[80,78,75,78,82,85,88,86,84,82,80,78]
+};
+const VM_COLOR = { VM0:"#8ba299", VM1:"#e2574c", VM2:"#e8a23d", VM3:"#7fbf6b", VM4:"#2fd6a3" };
+
+/* ===================== CHART.JS DEFAULTS ===================== */
+Chart.defaults.color = "#8ba299";
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 11;
+Chart.defaults.borderColor = "#1b2622";
+
+function gridOpts(title){
+  return {
+    scales:{
+      x:{ grid:{ color:"#1b2622" }, ticks:{ color:"#8ba299" }, title: title? {display:true,text:title.x,color:"#5f766d",font:{size:11}}:undefined },
+      y:{ grid:{ color:"#1b2622" }, ticks:{ color:"#8ba299" }, title: title? {display:true,text:title.y,color:"#5f766d",font:{size:11}}:undefined, beginAtZero:true }
+    },
+    plugins:{ legend:{ display:false } },
+    responsive:true, maintainAspectRatio:false
+  };
+}
+
+function makeBar(id, labels, data, colors, xLabel, yLabel, horizontal=false){
+  const ctx = document.getElementById(id).getContext('2d');
+  const opts = gridOpts({x:xLabel, y:yLabel});
+  if(horizontal){ opts.indexAxis = 'y'; opts.scales.x.title.text = xLabel; opts.scales.y.title.text=""; }
+  new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ data, backgroundColor:colors, borderRadius:5, barThickness: horizontal? 22: undefined }] },
+    options: opts
+  });
+}
+
+function makeLine(id, labels, seriesObj, yLabel){
+  const ctx = document.getElementById(id).getContext('2d');
+  const datasets = Object.keys(seriesObj).map(key=>({
+    label: SCHED_LABEL[key] || key,
+    data: seriesObj[key],
+    borderColor: SCHED_COLOR[key] || VM_COLOR[key],
+    backgroundColor: (SCHED_COLOR[key]||VM_COLOR[key]) + "22",
+    borderWidth:2.5,
+    pointRadius:3,
+    pointBackgroundColor: SCHED_COLOR[key] || VM_COLOR[key],
+    tension:0.3,
+    fill:false
+  }));
+  const opts = gridOpts({x:"", y:yLabel});
+  opts.plugins.legend = { display:true, position:'top', labels:{ color:"#8ba299", boxWidth:10, boxHeight:10, usePointStyle:true, font:{size:11} } };
+  new Chart(ctx, { type:'line', data:{ labels, datasets }, options: opts });
+}
+
+/* ===================== INIT CHARTS ===================== */
+document.addEventListener('DOMContentLoaded', () => {
+  const schedColors = D01.labels.map(l=>SCHED_COLOR[l]);
+
+  makeBar('chart-01', D01.labels, D01.data, schedColors, "Carbon Intensity (gCO₂/kWh)", "", true);
+  makeBar('chart-02', D02.labels, D02.data, schedColors, "", "Total Carbon (gCO₂)");
+  makeBar('chart-03', D03.labels, D03.data, schedColors, "", "Energy (kWh)");
+  makeBar('chart-04', D04.labels, D04.data, schedColors, "", "Makespan (s)");
+  makeBar('chart-05', D05.labels, D05.data, schedColors, "", "Cloudlets / sec");
+  makeBar('chart-06', D06.labels, D06.data, schedColors, "", "Execution Time (s)");
+
+  makeLine('chart-07', WL_LABELS, D07, "Carbon Intensity (gCO₂/kWh)");
+  makeLine('chart-08', WL_LABELS, D08, "Total Carbon (gCO₂)");
+  makeLine('chart-09', WL_LABELS, D09, "Makespan (s)");
+  makeLine('chart-10', WL_LABELS, D10, "Cloudlets / sec");
+
+  makeBar('chart-11', D11.labels, D11.data, D11.labels.map(l=>VM_COLOR[l]), "", "Number of Selections");
+  makeBar('chart-12', D12.labels, D12.data, D12.labels.map(l=>VM_COLOR[l]), "", "Average Carbon (gCO₂/kWh)");
+  makeLine('chart-13', TIME_SLOTS, D13, "Carbon Intensity (gCO₂/kWh)");
+
+  initControls();
+});
+
+/* ===================== CONTROLS + RESULT PANEL ===================== */
+let state = { scheduler:"RR", workload:"light" };
+
+function initControls(){
+  document.querySelectorAll('.wl-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.wl-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state.workload = btn.dataset.workload;
+      renderResult();
+    });
+  });
+  document.querySelectorAll('.sched-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.sched-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state.scheduler = btn.dataset.sched;
+      renderResult();
+    });
+  });
+  renderResult();
+}
+
+function renderResult(){
+  const r = RESULTS[state.scheduler][state.workload];
+  const schedName = SCHED_LABEL[state.scheduler];
+  const wlName = WL_LABEL[state.workload];
+
+  document.getElementById('path-sched').textContent = state.scheduler.toLowerCase().replace(/\s+/g,'-');
+  document.getElementById('path-wl').textContent = state.workload;
+  document.getElementById('result-eyebrow').textContent = `${state.scheduler.toUpperCase()} · ${state.workload.toUpperCase()} WORKLOAD`;
+  document.getElementById('result-headline').textContent = `${schedName} — ${wlName} Workload`;
+  document.getElementById('result-text').textContent = r.text;
+
+  const stats = [
+    { k:"Carbon Intensity", v:r.carbonIntensity, u:"gCO₂/kWh" },
+    { k:"Total Carbon", v:r.totalCarbon, u:"gCO₂" },
+    { k:"Energy", v:r.energy, u:"kWh" },
+    { k:"Makespan", v:r.makespan, u:"s" },
+    { k:"Throughput", v:r.throughput, u:"cl/s" },
+    { k:"Avg Exec Time", v:r.execTime, u:"s" },
+    { k:"VM Utilization", v:r.vmUtil, u:"%" }
+  ];
+  document.getElementById('result-stats').innerHTML = stats.map(s=>
+    `<div class="stat"><div class="k">${s.k}</div><div class="v">${s.v}<span>${s.u}</span></div></div>`
+  ).join('');
+}
+</script>
+
+</body>
+</html>

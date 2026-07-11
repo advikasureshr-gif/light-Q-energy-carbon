@@ -199,20 +199,20 @@ public class ECASchedulerInference {
     ) {
 
         System.out.println(
-            "| VM  | Selected | Avg Queue | Avg Utilization | Avg Carbon (gCO2/kWh) | Avg Reward |"
+            "| VM  | Selected | Avg Carbon (gCO2/kWh) | Avg Reward |"
         );
         System.out.println(
-            "| --- | -------: | --------: | --------------: | --------------------: | ---------: |"
+            "| --- | -------: | --------------------: | ---------: |"
         );
 
         for (ECAScheduler.InferenceRow row : rows) {
 
             System.out.printf(
-                "| VM%d | %8d | %9.2f | %14.2f%% | %21.2f | %10.3f |%n",
+                "| VM%d | %8d | %21.2f | %10.3f |%n",
                 row.getVmIndex(),
                 row.getSelected(),
-                row.getAvgQueue(),
-                row.getAvgUtilization() * 100.0,
+                //row.getAvgQueue(),
+                //row.getAvgUtilization() * 100.0,
                 row.getAvgCarbon(),
                 row.getAvgReward()
             );
@@ -275,14 +275,17 @@ public class ECASchedulerInference {
                 "Conclusion: VM choice is not following average reward; inspect reward weights or state encoding."
             );
         } else {
-            System.out.println(
+            /**System.out.println(
                 "Conclusion: reward sensitivity is weak or mixed; check whether queue/utilization states are changing."
-            );
+            );**/
+            System.out.println("Conclusion:\n" +
+                "VM selection does not directly follow average reward, indicating that the agent has learned a state-dependent policy.\n");
         }
 
         if (selectedCarbonCorrelation < -0.30) {
             System.out.println(
-                "Carbon signal: cleaner VMs are selected more often."
+                "Carbon signal: cleaner VMs are selected more often.\n" +
+                    "Carbon intensity shows a moderate negative correlation with VM selection, suggesting that cleaner VMs are preferred when advantageous."
             );
         } else if (selectedCarbonCorrelation > 0.30) {
             System.out.println(

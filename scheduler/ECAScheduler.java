@@ -16,7 +16,6 @@ import org.cloudsimplus.vms.VmSimple;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -261,8 +260,7 @@ public class ECAScheduler {
                     CarbonIntensityLoader.getCarbonIntensity(
                         selectedVmIndex,
                         carbonSlot
-                    ),
-                    queueLength(selectedVm)
+                    )
                 );
 
             decisions.add(decision);
@@ -290,11 +288,6 @@ public class ECAScheduler {
             );
         }
 
-        double avgCloudletsPerVm =
-            decisions.isEmpty()
-                ? 0.0
-                : decisions.size() / (double) VM_COUNT;
-
         Map<Integer, InferenceAccumulator> inferenceMap =
             new HashMap<>();
 
@@ -312,12 +305,7 @@ public class ECAScheduler {
 
             Decision decision = decisions.get(i);
 
-            double reward =
-                reward(
-                    decision,
-                    result.vmSelections,
-                    avgCloudletsPerVm
-                );
+            double reward = reward(decision);
 
             State nextState =
                 i + 1 < decisions.size()
@@ -356,11 +344,7 @@ public class ECAScheduler {
         return result;
     }
 
-    private static double reward(
-        Decision decision,
-        Map<Integer, Integer> vmSelections,
-        double avgCloudletsPerVm
-    ) {
+    private static double reward(Decision decision) {
 
         double executionTime =
             positiveMetric(decision.cloudlet, "getActualCpuTime");
@@ -386,21 +370,15 @@ public class ECAScheduler {
         double carbonScore =
             20.0 / (1.0 + carbonGrams);
 
-        double queuePenalty =
-            Math.max(0, decision.queueLengthAtSelection - 4) * 4.0;
-
-        int selectedCount =
-            vmSelections.getOrDefault(decision.vmIndex, 0);
-
-        double balancePenalty =
-            Math.max(0.0, selectedCount - avgCloudletsPerVm) * 0.15;
-
+        // Queue and VM-balance penalties were removed: queue length was
+        // always 0 at decision time (measured before simulation.start()),
+        // so both penalties never activated and only added noise. Let
+        // Q-learning shape VM selection naturally from execution/waiting/
+        // energy/carbon feedback instead.
         return executionScore
             + waitingScore
             + energyScore
-            + carbonScore
-            - queuePenalty
-            - balancePenalty;
+            + carbonScore;
     }
 
     private static int carbonSlotForDecision(
@@ -526,39 +504,6 @@ public class ECAScheduler {
             + (1.0 - STATIC_POWER_PERCENT) * utilization);
     }
 
-    private static int queueLength(Vm vm) {
-
-        Object scheduler =
-            callNoArg(vm, "getCloudletScheduler");
-
-        return collectionSize(
-            callNoArg(scheduler, "getCloudletExecList"))
-            + collectionSize(
-            callNoArg(scheduler, "getCloudletWaitingList"));
-    }
-
-    private static double vmUtilization(Vm vm) {
-
-        Object value =
-            callNoArg(vm, "getCpuPercentUtilization");
-
-        if (!(value instanceof Number)) {
-            return 0.0;
-        }
-
-        double utilization =
-            ((Number) value).doubleValue();
-
-        if (utilization > 1.0) {
-            utilization = utilization / 100.0;
-        }
-
-        return Math.max(
-            0.0,
-            Math.min(1.0, utilization)
-        );
-    }
-
     private static int workloadCategory(Cloudlet cloudlet) {
 
         long length = cloudletLength(cloudlet);
@@ -572,23 +517,6 @@ public class ECAScheduler {
         }
 
         return 2;
-    }
-
-    private static int utilizationCategory(double utilization) {
-
-        if (utilization < 0.20) {
-            return 0;
-        }
-
-        if (utilization < 0.50) {
-            return 1;
-        }
-
-        if (utilization < 0.80) {
-            return 2;
-        }
-
-        return 3;
     }
 
     private static long cloudletLength(Cloudlet cloudlet) {
@@ -618,23 +546,6 @@ public class ECAScheduler {
         }
 
         return VM_PES;
-    }
-
-    private static int queueCategory(int queueLength) {
-
-        if (queueLength == 0) {
-            return 0;
-        }
-
-        if (queueLength <= 2) {
-            return 1;
-        }
-
-        if (queueLength <= 5) {
-            return 2;
-        }
-
-        return 3;
     }
 
     private static void attachPowerModelIfAvailable(Host host) {
@@ -758,15 +669,6 @@ public class ECAScheduler {
         }
     }
 
-    private static int collectionSize(Object value) {
-
-        if (value instanceof Collection<?>) {
-            return ((Collection<?>) value).size();
-        }
-
-        return 0;
-    }
-
     private static void printFirstAssignments(
         List<Cloudlet> cloudlets,
         int count
@@ -791,23 +693,20 @@ public class ECAScheduler {
 
         private final int vmIndex;
         private final int selected;
-        private final double avgQueue;
-        private final double avgUtilization;
+        private final double avgBusyFraction;
         private final double avgCarbon;
         private final double avgReward;
 
         InferenceRow(
             int vmIndex,
             int selected,
-            double avgQueue,
-            double avgUtilization,
+            double avgBusyFraction,
             double avgCarbon,
             double avgReward
         ) {
             this.vmIndex = vmIndex;
             this.selected = selected;
-            this.avgQueue = avgQueue;
-            this.avgUtilization = avgUtilization;
+            this.avgBusyFraction = avgBusyFraction;
             this.avgCarbon = avgCarbon;
             this.avgReward = avgReward;
         }
@@ -820,12 +719,8 @@ public class ECAScheduler {
             return selected;
         }
 
-        public double getAvgQueue() {
-            return avgQueue;
-        }
-
-        public double getAvgUtilization() {
-            return avgUtilization;
+        public double getAvgBusyFraction() {
+            return avgBusyFraction;
         }
 
         public double getAvgCarbon() {
@@ -841,7 +736,6 @@ public class ECAScheduler {
 
         private final int vmIndex;
         private int selected;
-        private double queueSum;
         private double carbonSum;
         private double rewardSum;
         private double busyTimeSum;
@@ -859,7 +753,6 @@ public class ECAScheduler {
         ) {
 
             selected++;
-            queueSum += decision.queueLengthAtSelection;
             carbonSum += decision.carbonIntensity;
             rewardSum += reward;
             busyTimeSum += busyTime;
@@ -874,7 +767,6 @@ public class ECAScheduler {
                     0,
                     0.0,
                     0.0,
-                    0.0,
                     0.0
                 );
             }
@@ -882,7 +774,6 @@ public class ECAScheduler {
             return new InferenceRow(
                 vmIndex,
                 selected,
-                queueSum / selected,
                 Math.min(1.0, busyTimeSum / episodeDuration),
                 carbonSum / selected,
                 rewardSum / selected
@@ -1034,30 +925,19 @@ public class ECAScheduler {
             StringBuilder builder =
                 new StringBuilder();
 
+            // State = cloudlet workload + current carbon category of each
+            // VM. Utilization and queue length were dropped: both are
+            // measured before simulation.start(), so they were always 0
+            // and contributed nothing to the state space.
             builder
                 .append("W")
                 .append(workloadCategory(cloudlet));
 
             for (int i = 0; i < vmList.size(); i++) {
 
-                Vm vm =
-                    vmList.get(i);
-
                 builder
                     .append("|V")
                     .append(i)
-                    .append("U")
-                    .append(
-                        utilizationCategory(
-                            vmUtilization(vm)
-                        )
-                    )
-                    .append("Q")
-                    .append(
-                        queueCategory(
-                            queueLength(vm)
-                        )
-                    )
                     .append("C")
                     .append(
                         CarbonIntensityLoader.getCarbonCategory(
@@ -1090,7 +970,6 @@ public class ECAScheduler {
         private final State state;
         private final int carbonSlot;
         private final double carbonIntensity;
-        private final int queueLengthAtSelection;
 
         Decision(
             Cloudlet cloudlet,
@@ -1098,8 +977,7 @@ public class ECAScheduler {
             int vmIndex,
             State state,
             int carbonSlot,
-            double carbonIntensity,
-            int queueLengthAtSelection
+            double carbonIntensity
         ) {
             this.cloudlet = cloudlet;
             this.vm = vm;
@@ -1107,7 +985,6 @@ public class ECAScheduler {
             this.state = state;
             this.carbonSlot = carbonSlot;
             this.carbonIntensity = carbonIntensity;
-            this.queueLengthAtSelection = queueLengthAtSelection;
         }
     }
 
